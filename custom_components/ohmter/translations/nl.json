@@ -1,0 +1,114 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Koppelen met Ohmter",
+        "description": "Open in je Ohmter-dashboard Instellingen, dan Home Assistant, en kies Een Home Assistant koppelen. Typ hier de code die daar staat. Hij is tien minuten geldig en werkt één keer. Er is geen wachtwoord nodig.",
+        "data": {
+          "pairing_code": "Koppelcode",
+          "bridge_name": "Naam zoals getoond in Ohmter",
+          "base_url": "Ohmter-server"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw koppelen met Ohmter",
+        "description": "Ohmter heeft deze Home Assistant losgekoppeld. Maak een nieuwe koppelcode in je Ohmter-dashboard en typ die hier. Je apparaten en hun geschiedenis blijven bewaard.",
+        "data": {
+          "pairing_code": "Koppelcode"
+        }
+      }
+    },
+    "error": {
+      "bad_code": "Die code is niet geldig. Controleer hem in je Ohmter-dashboard.",
+      "code_expired": "Die code is verlopen. Maak een nieuwe in je Ohmter-dashboard.",
+      "cannot_connect": "Ohmter is niet bereikbaar. Controleer je internetverbinding en probeer het opnieuw.",
+      "unknown": "Er ging iets onverwachts mis. Probeer het over een minuut opnieuw."
+    },
+    "abort": {
+      "already_configured": "Deze Home Assistant is al gekoppeld met Ohmter.",
+      "reauth_successful": "Opnieuw gekoppeld met Ohmter."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ohmter-apparaten",
+        "menu_options": {
+          "add_device": "Een apparaat toevoegen dat Ohmter mag zien",
+          "remove_device": "Een apparaat verwijderen"
+        }
+      },
+      "add_device": {
+        "title": "Wat voor apparaat?",
+        "description": "Ohmter stuurt laadpalen en thermostaten aan. Meters, omvormers en batterijen zijn alleen-lezen: Ohmter gebruikt ze om te plannen, nooit om te sturen.",
+        "data": {
+          "kind": "Soort"
+        }
+      },
+      "map_entities": {
+        "title": "Welke entiteiten?",
+        "description": "Kies de entiteiten van deze {kind} uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest.",
+        "data": {
+          "name": "Naam zoals getoond in Ohmter",
+          "switch": "Laadschakelaar (aan = mag laden)",
+          "power": "Vermogen",
+          "current": "Maximale laadstroom (optioneel)",
+          "energy": "Energie (optioneel)",
+          "plugged_in": "Auto aangesloten (optioneel)",
+          "climate": "Thermostaat",
+          "import_power": "Afgenomen vermogen (van het net)",
+          "export_power": "Teruggeleverd vermogen (naar het net)",
+          "import_energy": "Totaal afgenomen energie (optioneel)",
+          "export_energy": "Totaal teruggeleverde energie (optioneel)",
+          "consumption": "Verbruik van het huis (optioneel)",
+          "grid_import": "Afname van het net (optioneel)",
+          "grid_export": "Teruglevering aan het net (optioneel)",
+          "soc": "Laadtoestand"
+        }
+      },
+      "remove_device": {
+        "title": "Apparaten verwijderen",
+        "data": {
+          "devices": "Te verwijderen apparaten"
+        }
+      }
+    },
+    "error": {
+      "name_too_short": "Geef het apparaat een naam van minstens twee tekens.",
+      "name_taken": "Er bestaat al een apparaat met deze naam.",
+      "missing_role": "Er ontbreekt een verplichte entiteit.",
+      "same_entity_twice": "Dezelfde entiteit is voor twee rollen gekozen."
+    }
+  },
+  "selector": {
+    "kind": {
+      "options": {
+        "ev": "Laadpaal",
+        "thermostat": "Thermostaat",
+        "p1": "P1 slimme meter (alleen lezen)",
+        "solar": "Omvormer (alleen lezen)",
+        "battery": "Thuisbatterij (alleen lezen)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_sync": { "name": "Laatste synchronisatie met Ohmter" },
+      "bridge_status": { "name": "Status Ohmter-bridge" },
+      "last_command": { "name": "Laatste Ohmter-opdracht" }
+    },
+    "binary_sensor": {
+      "connected": { "name": "Ohmter verbonden" }
+    }
+  },
+  "issues": {
+    "bridge_revoked": {
+      "title": "Ohmter heeft deze Home Assistant losgekoppeld",
+      "description": "Deze bridge is losgekoppeld vanuit het Ohmter-dashboard. Ohmter stuurt geen opdrachten meer. Maak een nieuwe koppelcode in Ohmter en koppel de integratie opnieuw om weer te verbinden."
+    },
+    "bridge_conflict": {
+      "title": "Twee Home Assistants gebruiken dezelfde Ohmter-koppeling",
+      "description": "Een andere Home Assistant (misschien een teruggezette back-up) meldt zich met de token van deze bridge. Ohmter stuurt geen opdrachten tot er nog maar één over is. Verwijder de integratie uit de kopie die je niet gebruikt en koppel deze opnieuw."
+    }
+  }
+}

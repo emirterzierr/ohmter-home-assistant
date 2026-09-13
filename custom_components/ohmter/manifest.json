@@ -1,0 +1,13 @@
+{
+  "domain": "ohmter",
+  "name": "Ohmter",
+  "codeowners": ["@emirterzierr"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/emirterzierr/smart-energy/blob/main/bridge/home_assistant/README.md",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/emirterzierr/smart-energy/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

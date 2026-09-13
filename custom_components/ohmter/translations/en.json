@@ -1,0 +1,114 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pair with Ohmter",
+        "description": "In your Ohmter dashboard open Settings, then Home Assistant, and choose Pair a Home Assistant. Type the code it shows you here. It is valid for ten minutes and works once. No password is needed.",
+        "data": {
+          "pairing_code": "Pairing code",
+          "bridge_name": "Name shown in Ohmter",
+          "base_url": "Ohmter server"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Pair again with Ohmter",
+        "description": "Ohmter disconnected this Home Assistant. Make a new pairing code in your Ohmter dashboard and type it here. Your devices and their history are kept.",
+        "data": {
+          "pairing_code": "Pairing code"
+        }
+      }
+    },
+    "error": {
+      "bad_code": "That code is not valid. Check it in your Ohmter dashboard.",
+      "code_expired": "That code has expired. Make a new one in your Ohmter dashboard.",
+      "cannot_connect": "Ohmter could not be reached. Check your internet connection and try again.",
+      "unknown": "Something unexpected happened. Try again in a minute."
+    },
+    "abort": {
+      "already_configured": "This Home Assistant is already paired with Ohmter.",
+      "reauth_successful": "Paired again with Ohmter."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ohmter devices",
+        "menu_options": {
+          "add_device": "Add a device for Ohmter to see",
+          "remove_device": "Remove a device"
+        }
+      },
+      "add_device": {
+        "title": "What kind of device?",
+        "description": "Ohmter controls chargers and thermostats. Meters, inverters and batteries are read only: Ohmter uses them to plan, never to steer.",
+        "data": {
+          "kind": "Kind"
+        }
+      },
+      "map_entities": {
+        "title": "Which entities?",
+        "description": "Pick the entities of this {kind} from your Home Assistant. Ohmter only ever receives the entities you choose here.",
+        "data": {
+          "name": "Name shown in Ohmter",
+          "switch": "Charging switch (on = may charge)",
+          "power": "Power",
+          "current": "Maximum charge current (optional)",
+          "energy": "Energy (optional)",
+          "plugged_in": "Car plugged in (optional)",
+          "climate": "Thermostat",
+          "import_power": "Import power (from the grid)",
+          "export_power": "Export power (to the grid)",
+          "import_energy": "Total imported energy (optional)",
+          "export_energy": "Total exported energy (optional)",
+          "consumption": "House consumption (optional)",
+          "grid_import": "Grid import (optional)",
+          "grid_export": "Grid export (optional)",
+          "soc": "State of charge"
+        }
+      },
+      "remove_device": {
+        "title": "Remove devices",
+        "data": {
+          "devices": "Devices to remove"
+        }
+      }
+    },
+    "error": {
+      "name_too_short": "Give the device a name of at least two characters.",
+      "name_taken": "A device with this name already exists.",
+      "missing_role": "A required entity is missing.",
+      "same_entity_twice": "The same entity is picked for two roles."
+    }
+  },
+  "selector": {
+    "kind": {
+      "options": {
+        "ev": "EV charger",
+        "thermostat": "Thermostat",
+        "p1": "P1 smart meter (read only)",
+        "solar": "Solar inverter (read only)",
+        "battery": "Home battery (read only)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_sync": { "name": "Last sync with Ohmter" },
+      "bridge_status": { "name": "Ohmter bridge status" },
+      "last_command": { "name": "Last Ohmter command" }
+    },
+    "binary_sensor": {
+      "connected": { "name": "Ohmter connected" }
+    }
+  },
+  "issues": {
+    "bridge_revoked": {
+      "title": "Ohmter disconnected this Home Assistant",
+      "description": "This bridge was disconnected from the Ohmter dashboard. Ohmter no longer sends commands. To connect again, make a new pairing code in Ohmter and re-pair the integration."
+    },
+    "bridge_conflict": {
+      "title": "Two Home Assistants are using the same Ohmter pairing",
+      "description": "Another Home Assistant instance (a restored backup, perhaps) is reporting with this bridge's token. Ohmter sends no commands until only one remains. Remove the integration from the copy you do not use, then pair this one again."
+    }
+  }
+}
