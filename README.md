@@ -33,7 +33,7 @@ integration's **Configure** and add a device:
 
 | Kind | Ohmter reads | Ohmter controls |
 |---|---|---|
-| EV charger | power, energy, plugged-in | charging on/off, max current |
+| EV charger | power (required), energy, plugged-in, switch state | charging on/off - only once you have mapped a switch **and confirmed it** on the check screen; max current - only with a `number` entity mapped. Without those the charger is monitored only, and Ohmter says so |
 | Thermostat | current and target temperature, mode | target temperature; restores what you had at the end of a window |
 | P1 smart meter | grid import/export | nothing |
 | Solar inverter | production | nothing |

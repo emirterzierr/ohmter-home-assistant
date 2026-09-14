@@ -47,6 +47,7 @@ from .const import (
 )
 from .executor import CommandRefused, execute
 from .hastate import build_reports
+from .mapping import spec_for_server
 from .ohmter_client import BridgeRevoked, OhmterClient, OhmterError, OhmterUnreachable
 from .protocol import SYNC_INTERVAL_SECONDS
 
@@ -143,7 +144,7 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             current = list(self.entry.options.get(OPT_DEVICES) or [])
             signature = json.dumps(current, sort_keys=True)
             if signature != self._devices_signature:
-                await self.client.put_devices(current)
+                await self.client.put_devices([spec_for_server(d) for d in current])
                 self.devices = current
                 self._devices_signature = signature
             reports = build_reports(self.devices, self._get_state, dt_util.utcnow().isoformat())

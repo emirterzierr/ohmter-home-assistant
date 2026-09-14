@@ -35,6 +35,7 @@
         "title": "Ohmter-apparaten",
         "menu_options": {
           "add_device": "Een apparaat toevoegen dat Ohmter mag zien",
+          "edit_device": "Entiteiten of naam van een apparaat wijzigen",
           "remove_device": "Een apparaat verwijderen"
         }
       },
@@ -47,23 +48,40 @@
       },
       "map_entities": {
         "title": "Welke entiteiten?",
-        "description": "Kies de entiteiten van deze {kind} uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest.",
+        "description": "Kies de entiteiten van deze {kind} uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
         "data": {
           "name": "Naam zoals getoond in Ohmter",
-          "switch": "Laadschakelaar (aan = mag laden)",
-          "power": "Vermogen",
-          "current": "Maximale laadstroom (optioneel)",
-          "energy": "Energie (optioneel)",
-          "plugged_in": "Auto aangesloten (optioneel)",
+          "switch": "Laadschakelaar",
+          "power": "Laadvermogen",
+          "current": "Maximale laadstroom",
+          "energy": "Energie",
+          "plugged_in": "Auto aangesloten",
           "climate": "Thermostaat",
           "import_power": "Afgenomen vermogen (van het net)",
           "export_power": "Teruggeleverd vermogen (naar het net)",
-          "import_energy": "Totaal afgenomen energie (optioneel)",
-          "export_energy": "Totaal teruggeleverde energie (optioneel)",
-          "consumption": "Verbruik van het huis (optioneel)",
-          "grid_import": "Afname van het net (optioneel)",
-          "grid_export": "Teruglevering aan het net (optioneel)",
+          "import_energy": "Totaal afgenomen energie",
+          "export_energy": "Totaal teruggeleverde energie",
+          "consumption": "Verbruik van het huis",
+          "grid_import": "Afname van het net",
+          "grid_export": "Teruglevering aan het net",
           "soc": "Laadtoestand"
+        },
+        "data_description": {
+          "name": "Een label. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "switch": "Optioneel. Aan moet betekenen dat de auto mag laden, uit moet het stoppen. Nodig om Ohmter het laden te laten starten en stoppen; zonder wordt de laadpaal alleen gevolgd. Je bevestigt dit op het volgende scherm.",
+          "power": "Verplicht. Wat de laadpaal nu afneemt, in W of kW. Zo ziet Ohmter dat er geladen wordt.",
+          "current": "Optioneel. Een number-entiteit voor de maximale stroom van de laadpaal in A. Nodig voor load balancing onder je hoofdzekering; zonder verandert Ohmter de stroom nooit.",
+          "energy": "Optioneel. De eigen sessie- of totaalteller van de laadpaal in Wh of kWh. Hiermee komt de sessie-energie van de laadpaal zelf in plaats van een schatting uit vermogen.",
+          "plugged_in": "Optioneel. Een binary sensor die zegt of er een auto is aangesloten. Hiermee wordt een start zonder auto als zodanig gemeld, niet als storing.",
+          "climate": "Verplicht. Ohmter leest hieruit de huidige en de doeltemperatuur en zet, zodra je bediening bevestigt, het doel tijdens een goedkoop venster en herstelt het daarna.",
+          "import_power": "Gebruik samen met teruggeleverd vermogen als de meter geen enkele netto-sensor heeft.",
+          "export_power": "Gebruik samen met afgenomen vermogen als de meter geen enkele netto-sensor heeft.",
+          "import_energy": "Optioneel. Cumulatieve teller, in kWh.",
+          "export_energy": "Optioneel. Cumulatieve teller, in kWh.",
+          "consumption": "Optioneel. Laat Ohmter het eigen verbruik tonen.",
+          "grid_import": "Optioneel. Wat werkelijk van het net wordt afgenomen.",
+          "grid_export": "Optioneel. Wat werkelijk aan het net wordt geleverd. Zonder dit schat Ohmter de teruglevering niet uit de opbrengst.",
+          "soc": "Verplicht. Laadtoestand van de batterij in %. Ohmter leest hem; hij stuurt de batterij nooit."
         }
       },
       "remove_device": {
@@ -71,13 +89,36 @@
         "data": {
           "devices": "Te verwijderen apparaten"
         }
+      },
+      "edit_device": {
+        "title": "Welk apparaat?",
+        "data": {
+          "device": "Apparaat"
+        }
+      },
+      "confirm_mapping": {
+        "title": "Controleer voor het opslaan",
+        "description": "**{name}** ({kind})\n\nWat elke entiteit nu meet:\n{readings}\n\nEntiteiten die op dit moment niet beschikbaar zijn: {quiet}\n\nWat Ohmter zal kunnen doen: {features}\n\nBedieningsentiteit: {control_entity}",
+        "data": {
+          "confirm_control": "Ik bevestig dat deze entiteit aanzetten het laden start (toestaat) en uitzetten het stopt, en dat Ohmter dat mag doen."
+        },
+        "data_description": {
+          "confirm_control": "Laat dit uit om het apparaat alleen te volgen. Je kunt dit later wijzigen onder Wijzigen."
+        }
       }
     },
     "error": {
       "name_too_short": "Geef het apparaat een naam van minstens twee tekens.",
       "name_taken": "Er bestaat al een apparaat met deze naam.",
-      "missing_role": "Er ontbreekt een verplichte entiteit.",
-      "same_entity_twice": "Dezelfde entiteit is voor twee rollen gekozen."
+      "missing_role": "Deze entiteit is verplicht om het apparaat te laten werken.",
+      "same_entity_twice": "Dezelfde entiteit is voor twee rollen gekozen.",
+      "wrong_domain": "Deze entiteit is van het verkeerde soort voor deze rol (bijvoorbeeld een sensor waar een schakelaar nodig is).",
+      "wrong_unit": "Deze entiteit meldt een eenheid die Ohmter niet als deze rol kan lezen (bijvoorbeeld V of % waar W nodig is).",
+      "not_numeric": "De waarde van deze entiteit is geen getal.",
+      "invalid_entity": "Deze entiteit past niet bij deze rol."
+    },
+    "abort": {
+      "device_gone": "Dat apparaat staat niet meer in de lijst."
     }
   },
   "selector": {
@@ -93,12 +134,20 @@
   },
   "entity": {
     "sensor": {
-      "last_sync": { "name": "Laatste synchronisatie met Ohmter" },
-      "bridge_status": { "name": "Status Ohmter-bridge" },
-      "last_command": { "name": "Laatste Ohmter-opdracht" }
+      "last_sync": {
+        "name": "Laatste synchronisatie met Ohmter"
+      },
+      "bridge_status": {
+        "name": "Status Ohmter-bridge"
+      },
+      "last_command": {
+        "name": "Laatste Ohmter-opdracht"
+      }
     },
     "binary_sensor": {
-      "connected": { "name": "Ohmter verbonden" }
+      "connected": {
+        "name": "Ohmter verbonden"
+      }
     }
   },
   "issues": {

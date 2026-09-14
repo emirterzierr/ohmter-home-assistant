@@ -59,15 +59,51 @@ def _available(kind: str, entities: Dict[str, str], get_state: Callable[[str], A
     return True
 
 
+def _unavailable_roles(ent: Dict[str, str], get_state: Callable[[str], Any]) -> list:
+    out = []
+    for role, eid in ent.items():
+        st = get_state(eid)
+        if st is None or st.state in _BAD_STATES:
+            out.append(role)
+    return out
+
+
+def _latest_update(ent: Dict[str, str], get_state: Callable[[str], Any]) -> Optional[str]:
+    """The newest `last_updated` among the mapped entities, as ISO, or None."""
+    best = None
+    for eid in ent.values():
+        st = get_state(eid)
+        lu = getattr(st, "last_updated", None) if st is not None else None
+        if lu is None:
+            continue
+        try:
+            iso = lu.isoformat()
+        except AttributeError:
+            iso = str(lu)
+        if best is None or iso > best:
+            best = iso
+    return best
+
+
 def read_device(kind: str, entities: Dict[str, str], get_state: Callable[[str], Any]) -> Dict[str, Any]:
     """The `state` object for one device in a `/bridge/sync` report."""
     ent = {k: v for k, v in (entities or {}).items() if v}
     st: Dict[str, Any] = {"available": _available(kind, ent, get_state)}
+    # Which mapped entities are silent right now, and when any of them last
+    # changed - so the dashboard can say "energy sensor unavailable" beside a
+    # charger that is otherwise reporting, and "fresh" only with evidence.
+    unavailable = _unavailable_roles(ent, get_state)
+    if unavailable:
+        st["unavailable_roles"] = unavailable
+    updated = _latest_update(ent, get_state)
+    if updated:
+        st["updated_at"] = updated
     if not st["available"]:
         return st
     if kind == "ev":
-        sw = get_state(ent["switch"])
-        st["switch_on"] = _bool(sw)
+        # The switch is optional now: a charger with none is monitored only.
+        sw = get_state(ent["switch"]) if "switch" in ent else None
+        st["switch_on"] = _bool(sw) if sw is not None else None
         st["power_w"] = _num(get_state(ent["power"]), to="W")
         if "current" in ent:
             cur = get_state(ent["current"])
@@ -80,10 +116,14 @@ def read_device(kind: str, entities: Dict[str, str], get_state: Callable[[str], 
         if "plugged_in" in ent:
             st["plugged_in"] = _bool(get_state(ent["plugged_in"]))
         power = st.get("power_w") or 0.0
-        st["charging"] = bool(st.get("switch_on")) and power > 100.0
+        # Without a switch, drawing power *is* charging; with one, both.
+        st["charging"] = power > 100.0 and (st.get("switch_on") is not False)
         # The vendor's own smart mode shows up as the switch going unavailable
         # (Wallbox eco-smart) - reported so the tile can say who is in charge.
-        st["vendor_mode"] = None if sw is not None and sw.state not in _BAD_STATES else "switch_unavailable"
+        if "switch" in ent:
+            st["vendor_mode"] = None if sw is not None and sw.state not in _BAD_STATES else "switch_unavailable"
+        else:
+            st["vendor_mode"] = None
     elif kind == "thermostat":
         cl = get_state(ent["climate"])
         attrs = cl.attributes or {}

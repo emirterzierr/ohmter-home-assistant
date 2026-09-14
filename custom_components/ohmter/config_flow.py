@@ -1,10 +1,19 @@
 """Pairing (config flow) and mapping entities to Ohmter devices (options flow).
 
 Pairing asks for one thing: the code shown in the Ohmter dashboard. No Ohmter
-password, no Home Assistant token, no vendor credential. Mapping shows the
-household their own entities, filtered by domain and device class so the
-dropdown for "charging switch" holds switches and the one for "power" holds
-power sensors, and refuses to save a device with a required role missing.
+password, no Home Assistant token, no vendor credential.
+
+Mapping is three screens, and the middle one is the point. The household
+picks entities per role (filtered by domain and device class, each field
+saying what it is for and what is lost without it); the integration then
+*reads* those entities and shows what came back - "Power: 2,400 W", "Energy:
+unavailable", "Charging control: not configured" - and only then asks them to
+confirm. Control is a grant made on that screen in so many words; a switch
+that is merely picked is watched, never switched. Nothing is called on any
+entity during mapping.
+
+A device keeps its `device_key` for life. Renaming changes the label Ohmter
+shows, not the identity its history hangs on.
 """
 from __future__ import annotations
 
@@ -15,9 +24,12 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.instance_id import async_get as async_get_instance_id
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .const import (
@@ -31,6 +43,7 @@ from .const import (
     VERSION,
 )
 from .coordinator import make_transport
+from .mapping import describe_entity, format_value, preview
 from .ohmter_client import BadPairingCode, OhmterClient, OhmterError, OhmterUnreachable
 from .protocol import DEFAULT_BASE_URL, DEVICE_KINDS, REQUIRED_ROLES, ROLES_BY_KIND
 
@@ -64,6 +77,10 @@ _ROLE_SELECTORS: Dict[str, Dict[str, selector.EntitySelectorConfig]] = {
         "power": selector.EntitySelectorConfig(domain="sensor", device_class="power"),
     },
 }
+
+# The role whose Home Assistant device stands for the physical device.
+_IDENTITY_ROLE = {"ev": "power", "thermostat": "climate", "p1": "power", "solar": "power", "battery": "soc"}
+_CONTROL_ROLE = {"ev": "switch", "thermostat": "climate"}
 
 
 async def _pair(hass, base_url: str, code: str, name: str) -> Dict[str, Any]:
@@ -140,23 +157,46 @@ class OhmterConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class OhmterOptionsFlow(OptionsFlow):
-    """Add or remove the devices this Home Assistant reports to Ohmter."""
+    """Add, edit or remove the devices this Home Assistant reports to Ohmter."""
 
     def __init__(self) -> None:
         self._kind: Optional[str] = None
+        self._editing_key: Optional[str] = None
+        self._draft: Optional[Dict[str, Any]] = None
+        self._preview: Optional[Dict[str, Any]] = None
 
     def _devices(self) -> List[Dict[str, Any]]:
         return list(self.config_entry.options.get(OPT_DEVICES) or [])
 
+    def _get_state(self, entity_id: str):
+        return self.hass.states.get(entity_id) if entity_id else None
+
+    def _registry_meta(self, entity_id: str) -> Dict[str, Any]:
+        reg = er.async_get(self.hass).async_get(entity_id)
+        if reg is None:
+            return {}
+        out: Dict[str, Any] = {"unique_id": reg.unique_id, "device_id": reg.device_id}
+        if reg.device_id:
+            dev = dr.async_get(self.hass).async_get(reg.device_id)
+            if dev is not None:
+                out["device_name"] = dev.name_by_user or dev.name
+        if reg.original_device_class and not out.get("device_class"):
+            out["device_class"] = reg.original_device_class
+        return out
+
+    # -- menu ---------------------------------------------------------------
+
     async def async_step_init(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
         options = ["add_device"]
         if self._devices():
-            options.append("remove_device")
+            options.extend(["edit_device", "remove_device"])
         return self.async_show_menu(step_id="init", menu_options=options)
 
     async def async_step_add_device(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
         if user_input is not None:
             self._kind = user_input["kind"]
+            self._editing_key = None
+            self._draft = None
             return await self.async_step_map_entities()
         return self.async_show_form(
             step_id="add_device",
@@ -169,37 +209,139 @@ class OhmterOptionsFlow(OptionsFlow):
             }),
         )
 
+    async def async_step_edit_device(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
+        devices = self._devices()
+        if user_input is not None:
+            key = user_input["device"]
+            current = next((d for d in devices if d["device_key"] == key), None)
+            if current is None:
+                return self.async_abort(reason="device_gone")
+            self._kind = current["kind"]
+            self._editing_key = key
+            self._draft = dict(current)
+            return await self.async_step_map_entities()
+        options = [selector.SelectOptionDict(value=d["device_key"], label=f"{d['name']} ({d['kind']})") for d in devices]
+        return self.async_show_form(
+            step_id="edit_device",
+            data_schema=vol.Schema({
+                vol.Required("device"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=options, mode=selector.SelectSelectorMode.LIST)
+                ),
+            }),
+        )
+
+    # -- pick ---------------------------------------------------------------
+
     async def async_step_map_entities(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
         kind = self._kind or "ev"
         errors: Dict[str, str] = {}
+        prior = self._draft or {}
         if user_input is not None:
             name = (user_input.get("name") or "").strip()
             entities = {role: user_input[role] for role in ROLES_BY_KIND[kind] if user_input.get(role)}
-            missing = [r for r in REQUIRED_ROLES[kind] if r not in entities]
-            if kind == "p1" and "power" not in entities and not ("import_power" in entities and "export_power" in entities):
-                missing.append("power")
             if len(name) < 2:
                 errors["name"] = "name_too_short"
-            elif missing:
-                errors["base"] = "missing_role"
-            elif len(set(entities.values())) != len(entities):
-                errors["base"] = "same_entity_twice"
             else:
-                devices = self._devices()
-                key = slugify(name)[:40] or f"{kind}-{len(devices) + 1}"
-                if any(d["device_key"] == key for d in devices):
+                taken = any(d["name"].strip().lower() == name.lower() and d["device_key"] != self._editing_key
+                            for d in self._devices())
+                if taken:
                     errors["name"] = "name_taken"
-                else:
-                    devices.append({"device_key": key, "kind": kind, "name": name, "entities": entities})
-                    return self.async_create_entry(data={OPT_DEVICES: devices})
-        fields: Dict[Any, Any] = {vol.Required("name", default=(user_input or {}).get("name", "")): str}
+            # Read what the household picked. Nothing is called; a wrong
+            # domain or unit stops here with the field named, an entity
+            # that is merely quiet is shown as such on the next screen.
+            pv = preview(kind, entities, self._get_state, now=dt_util.utcnow())
+            for r in pv["blocking"]:
+                field = r["role"] if r["role"] in ROLES_BY_KIND[kind] else "base"
+                errors[field] = {"missing": "missing_role", "wrong_domain": "wrong_domain", "wrong_unit": "wrong_unit",
+                                 "not_numeric": "not_numeric", "same_entity": "same_entity_twice"}.get(r["problem"], "invalid_entity")
+            if not errors:
+                meta = {}
+                for role, eid in entities.items():
+                    meta[role] = describe_entity(eid, self._get_state(eid), self._registry_meta(eid))
+                identity_role = _IDENTITY_ROLE.get(kind)
+                ha_device_id = (meta.get(identity_role) or {}).get("ha_device_id") or ""
+                self._draft = {
+                    **prior,
+                    "kind": kind, "name": name, "entities": entities, "meta": meta, "ha_device_id": ha_device_id,
+                    "device_key": self._editing_key or prior.get("device_key") or self._new_key(name, kind),
+                }
+                self._preview = pv
+                return await self.async_step_confirm_mapping()
+        defaults = user_input or prior
+        fields: Dict[Any, Any] = {vol.Required("name", default=defaults.get("name", "")): str}
+        prior_entities = (defaults.get("entities") if isinstance(defaults.get("entities"), dict) else None) or defaults
         for role in ROLES_BY_KIND[kind]:
             marker = vol.Required if role in REQUIRED_ROLES[kind] else vol.Optional
-            fields[marker(role)] = selector.EntitySelector(_ROLE_SELECTORS[kind][role])
+            current = prior_entities.get(role)
+            key = marker(role, default=current) if current else marker(role)
+            fields[key] = selector.EntitySelector(_ROLE_SELECTORS[kind][role])
         return self.async_show_form(
             step_id="map_entities", data_schema=vol.Schema(fields), errors=errors,
             description_placeholders={"kind": kind},
         )
+
+    def _new_key(self, name: str, kind: str) -> str:
+        devices = self._devices()
+        base = slugify(name)[:40] or f"{kind}-{len(devices) + 1}"
+        key, n = base, 2
+        while any(d["device_key"] == key for d in devices):
+            key = f"{base[:36]}-{n}"
+            n += 1
+        return key
+
+    # -- check, then confirm ---------------------------------------------------
+
+    async def async_step_confirm_mapping(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
+        draft = self._draft
+        pv = self._preview
+        if not draft or not pv:
+            return await self.async_step_init()
+        kind = draft["kind"]
+        control_role = _CONTROL_ROLE.get(kind)
+        can_control = bool(control_role and draft["entities"].get(control_role))
+        if user_input is not None:
+            confirmed = bool(user_input.get("confirm_control")) if can_control else False
+            device = {
+                "device_key": draft["device_key"], "kind": kind, "name": draft["name"],
+                "entities": draft["entities"], "meta": draft["meta"], "ha_device_id": draft.get("ha_device_id") or "",
+                "control_confirmed": confirmed,
+            }
+            devices = self._devices()
+            if self._editing_key:
+                devices = [device if d["device_key"] == self._editing_key else d for d in devices]
+            else:
+                devices.append(device)
+            return self.async_create_entry(data={OPT_DEVICES: devices})
+        lines = []
+        for r in pv["roles"]:
+            if not r["entity_id"]:
+                if r["required"]:
+                    lines.append(f"- {r['role']}: -")
+                continue
+            lines.append(f"- {r['role']}: {format_value(r)} ({r['entity_id']})")
+        feats = pv["features"]
+        if kind == "ev":
+            feat_line = ("monitoring" if feats["monitoring"] else "-") + (", current limit" if feats["current_limit"] else "") \
+                + (", session energy" if feats["session_energy"] else "") + (", car plugged-in state" if feats["vehicle_connection"] else "")
+            feat_line += "; charging control: " + ("available once confirmed below" if can_control else "not configured (no switch mapped)")
+        elif kind == "thermostat":
+            feat_line = "monitoring; control: available once confirmed below"
+        else:
+            feat_line = "monitoring only (this kind is never controlled)"
+        quiet = ", ".join(r["role"] for r in pv["warnings"]) or "-"
+        schema: Dict[Any, Any] = {}
+        if can_control:
+            schema[vol.Optional("confirm_control", default=bool(draft.get("control_confirmed", False)))] = selector.BooleanSelector()
+        return self.async_show_form(
+            step_id="confirm_mapping",
+            data_schema=vol.Schema(schema),
+            description_placeholders={
+                "name": draft["name"], "kind": kind, "readings": "\n".join(lines) or "-", "features": feat_line,
+                "quiet": quiet, "control_entity": draft["entities"].get(control_role or "", "") or "-",
+            },
+        )
+
+    # -- remove ---------------------------------------------------------------
 
     async def async_step_remove_device(self, user_input: Optional[Dict[str, Any]] = None) -> ConfigFlowResult:
         devices = self._devices()

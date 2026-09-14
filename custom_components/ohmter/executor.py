@@ -76,6 +76,21 @@ async def execute(
     action = str(command.get("action") or "")
     if action not in ACTIONS_BY_KIND.get(kind, ()):
         raise CommandRefused(f"{action} is not an action for a {kind}")
+    # The household grants control in so many words when they map the device
+    # (a legacy mapping with no flag keeps what it had). A switch that is
+    # merely mapped is watched, never switched; a missing `number` means no
+    # current limit. The server refuses these too; this is the last door.
+    entities = device.get("entities") or {}
+    confirmed = device.get("control_confirmed")
+    if action in ("on", "off"):
+        if not entities.get("switch"):
+            raise CommandRefused("no charging switch is mapped for this device in Home Assistant")
+        if confirmed is False:
+            raise CommandRefused("charging control was not confirmed for this device in Home Assistant")
+    elif action == "set_current" and not entities.get("current"):
+        raise CommandRefused("no charge-current entity is mapped for this device in Home Assistant")
+    elif action in ("set_temperature", "restore") and confirmed is False:
+        raise CommandRefused("thermostat control was not confirmed for this device in Home Assistant")
     expires = _parse(command.get("expires_at"))
     if expires is not None:
         a, b = _same_clock(now, expires)

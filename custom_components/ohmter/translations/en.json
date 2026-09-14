@@ -35,6 +35,7 @@
         "title": "Ohmter devices",
         "menu_options": {
           "add_device": "Add a device for Ohmter to see",
+          "edit_device": "Change a device's entities or name",
           "remove_device": "Remove a device"
         }
       },
@@ -47,23 +48,40 @@
       },
       "map_entities": {
         "title": "Which entities?",
-        "description": "Pick the entities of this {kind} from your Home Assistant. Ohmter only ever receives the entities you choose here.",
+        "description": "Pick the entities of this {kind} from your Home Assistant. Ohmter only ever receives the entities you choose here. Nothing is switched during setup; the next screen shows what each entity reads right now.",
         "data": {
           "name": "Name shown in Ohmter",
-          "switch": "Charging switch (on = may charge)",
-          "power": "Power",
-          "current": "Maximum charge current (optional)",
-          "energy": "Energy (optional)",
-          "plugged_in": "Car plugged in (optional)",
+          "switch": "Charging switch",
+          "power": "Charging power",
+          "current": "Maximum charge current",
+          "energy": "Energy",
+          "plugged_in": "Car plugged in",
           "climate": "Thermostat",
           "import_power": "Import power (from the grid)",
           "export_power": "Export power (to the grid)",
-          "import_energy": "Total imported energy (optional)",
-          "export_energy": "Total exported energy (optional)",
-          "consumption": "House consumption (optional)",
-          "grid_import": "Grid import (optional)",
-          "grid_export": "Grid export (optional)",
+          "import_energy": "Total imported energy",
+          "export_energy": "Total exported energy",
+          "consumption": "House consumption",
+          "grid_import": "Grid import",
+          "grid_export": "Grid export",
           "soc": "State of charge"
+        },
+        "data_description": {
+          "name": "A label. Renaming later keeps the device and its history.",
+          "switch": "Optional. On must mean the car may charge, off must stop it. Needed for Ohmter to start and stop charging; without it the charger is monitored only. You confirm this on the next screen.",
+          "power": "Required. What the charger draws now, in W or kW. This is how Ohmter sees that charging is happening.",
+          "current": "Optional. A number entity for the charger's maximum current in A. Needed for load balancing under your main fuse; without it Ohmter never changes the current.",
+          "energy": "Optional. The charger's own session or total energy counter in Wh or kWh. With it, session energy comes from the charger instead of being estimated from power.",
+          "plugged_in": "Optional. A binary sensor for whether a car is connected. With it, a start with no car is reported as such rather than as a fault.",
+          "climate": "Required. Ohmter reads the current and target temperature from it and, once you confirm control, sets the target during a cheap window and restores it afterwards.",
+          "import_power": "Use with export power when the meter has no single net-power sensor.",
+          "export_power": "Use with import power when the meter has no single net-power sensor.",
+          "import_energy": "Optional. Cumulative counter, in kWh.",
+          "export_energy": "Optional. Cumulative counter, in kWh.",
+          "consumption": "Optional. Lets Ohmter show self-consumption.",
+          "grid_import": "Optional. What is actually drawn from the grid.",
+          "grid_export": "Optional. What is actually sent to the grid. Without it Ohmter does not guess export from production.",
+          "soc": "Required. Battery state of charge in %. Ohmter reads it; it never steers the battery."
         }
       },
       "remove_device": {
@@ -71,13 +89,36 @@
         "data": {
           "devices": "Devices to remove"
         }
+      },
+      "edit_device": {
+        "title": "Which device?",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "confirm_mapping": {
+        "title": "Check before saving",
+        "description": "**{name}** ({kind})\n\nWhat each entity reads right now:\n{readings}\n\nEntities that are unavailable at the moment: {quiet}\n\nWhat Ohmter will be able to do: {features}\n\nControl entity: {control_entity}",
+        "data": {
+          "confirm_control": "I confirm that switching this entity on starts (allows) charging and switching it off stops it, and that Ohmter may do so."
+        },
+        "data_description": {
+          "confirm_control": "Leave this off to add the device for monitoring only. You can change it later under Edit."
+        }
       }
     },
     "error": {
       "name_too_short": "Give the device a name of at least two characters.",
       "name_taken": "A device with this name already exists.",
-      "missing_role": "A required entity is missing.",
-      "same_entity_twice": "The same entity is picked for two roles."
+      "missing_role": "This entity is required for the device to work.",
+      "same_entity_twice": "The same entity is picked for two roles.",
+      "wrong_domain": "This entity is the wrong kind for this role (for example a sensor where a switch is needed).",
+      "wrong_unit": "This entity reports a unit Ohmter cannot read as this role (for example V or % where W is needed).",
+      "not_numeric": "This entity's value is not a number.",
+      "invalid_entity": "This entity does not fit this role."
+    },
+    "abort": {
+      "device_gone": "That device is no longer in the list."
     }
   },
   "selector": {
@@ -93,12 +134,20 @@
   },
   "entity": {
     "sensor": {
-      "last_sync": { "name": "Last sync with Ohmter" },
-      "bridge_status": { "name": "Ohmter bridge status" },
-      "last_command": { "name": "Last Ohmter command" }
+      "last_sync": {
+        "name": "Last sync with Ohmter"
+      },
+      "bridge_status": {
+        "name": "Ohmter bridge status"
+      },
+      "last_command": {
+        "name": "Last Ohmter command"
+      }
     },
     "binary_sensor": {
-      "connected": { "name": "Ohmter connected" }
+      "connected": {
+        "name": "Ohmter connected"
+      }
     }
   },
   "issues": {

@@ -35,8 +35,11 @@ ROLES_BY_KIND = {
     "battery": ("soc", "power"),
 }
 
+# An EV needs only `power`: a charger with no writable switch is still worth
+# watching, and Ohmter says "monitoring only" rather than refusing it. Control
+# needs a switch *and* the household's confirmation (`control_confirmed`).
 REQUIRED_ROLES = {
-    "ev": ("switch", "power"),
+    "ev": ("power",),
     "thermostat": ("climate",),
     "p1": (),
     "solar": ("power",),
@@ -49,6 +52,39 @@ PATHS = {
     "sync": "/bridge/sync",
     "ack": "/bridge/commands/{command_id}/ack",
     "unpair": "/bridge/self",
+}
+
+# The Home Assistant domain each role's entity must come from, and the units a
+# numeric role may report. The server checks the same tables; a mismatch is
+# refused at mapping time with the role named, never turned into a number.
+ROLE_DOMAINS = {
+    "switch": ("switch",),
+    "power": ("sensor",),
+    "current": ("number",),
+    "energy": ("sensor",),
+    "plugged_in": ("binary_sensor",),
+    "climate": ("climate",),
+    "import_power": ("sensor",),
+    "export_power": ("sensor",),
+    "import_energy": ("sensor",),
+    "export_energy": ("sensor",),
+    "consumption": ("sensor",),
+    "grid_import": ("sensor",),
+    "grid_export": ("sensor",),
+    "soc": ("sensor",),
+}
+ROLE_UNITS = {
+    "power": ("w", "kw", "mw"),
+    "import_power": ("w", "kw", "mw"),
+    "export_power": ("w", "kw", "mw"),
+    "consumption": ("w", "kw", "mw"),
+    "grid_import": ("w", "kw", "mw"),
+    "grid_export": ("w", "kw", "mw"),
+    "energy": ("wh", "kwh", "mwh"),
+    "import_energy": ("wh", "kwh", "mwh"),
+    "export_energy": ("wh", "kwh", "mwh"),
+    "current": ("a", "ma"),
+    "soc": ("%",),
 }
 
 # Error codes the server sends in `detail.code`; the integration branches on
