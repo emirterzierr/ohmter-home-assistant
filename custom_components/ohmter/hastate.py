@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
+from .mapping import mapping_rev, unit_factor
 from .protocol import REQUIRED_ROLES
 
 _BAD_STATES = ("unavailable", "unknown", "", None)
@@ -24,19 +25,9 @@ def _num(state: Any, *, unit_from: Optional[str] = None, to: Optional[str] = Non
     except (TypeError, ValueError):
         return None
     unit = str((state.attributes or {}).get("unit_of_measurement") or unit_from or "").strip()
-    if to == "W":
-        if unit.lower() == "kw":
-            v *= 1000.0
-        elif unit.lower() == "mw":
-            v *= 1_000_000.0
-    elif to == "kWh":
-        if unit.lower() == "wh":
-            v /= 1000.0
-        elif unit.lower() == "mwh":
-            v *= 1000.0
-    elif to == "A":
-        if unit.lower() == "ma":
-            v /= 1000.0
+    if to in ("W", "kWh", "A"):
+        # Case-aware: mW is a milliwatt and MW a megawatt (mapping.unit_factor).
+        v *= unit_factor(unit, to)
     return v
 
 
@@ -172,5 +163,9 @@ def build_reports(devices: list, get_state: Callable[[str], Any], observed_at: s
             state = read_device(d["kind"], d.get("entities") or {}, get_state)
         except Exception as exc:  # noqa: BLE001 - one broken mapping must not stop the others
             state = {"available": False, "error": str(exc)[:120]}
-        out.append({"device_key": d["device_key"], "state": state, "observed_at": observed_at})
+        # Which mapping these values were read through. Ohmter ignores a report
+        # whose mapping it has already replaced, so a sync that was in flight
+        # during an Edit cannot be taken as the new entity's state.
+        out.append({"device_key": d["device_key"], "state": state, "observed_at": observed_at,
+                    "mapping_rev": mapping_rev(d.get("entities") or {})})
     return out

@@ -87,6 +87,14 @@ ROLE_UNITS = {
     "soc": ("%",),
 }
 
+# Two fields that tie a command and a report to one mapping. A command names
+# the entity it was decided for, as {"role", "entity_id"}, and the bridge
+# refuses to run it against any other; a report carries the fingerprint of
+# the role -> entity map it was read through, and the server ignores a report
+# (and holds back that device's commands) when its own mapping is newer.
+COMMAND_TARGET_FIELD = "target"
+REPORT_MAPPING_REV_FIELD = "mapping_rev"
+
 # Error codes the server sends in `detail.code`; the integration branches on
 # these and nothing else.
 ERR_BRIDGE_REVOKED = "bridge_revoked"

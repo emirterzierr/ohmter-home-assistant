@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-from .protocol import ACTIONS_BY_KIND, MIN_NUMBER_WRITE_INTERVAL_SECONDS
+from .protocol import ACTIONS_BY_KIND, COMMAND_TARGET_FIELD, MIN_NUMBER_WRITE_INTERVAL_SECONDS
 
 CallService = Callable[[str, str, Dict[str, Any]], Awaitable[None]]
 GetState = Callable[[str], Any]
@@ -76,6 +76,15 @@ async def execute(
     action = str(command.get("action") or "")
     if action not in ACTIONS_BY_KIND.get(kind, ()):
         raise CommandRefused(f"{action} is not an action for a {kind}")
+    # The server names the entity the command was decided for. If this
+    # mapping points that role somewhere else - it was edited after Ohmter
+    # queued the command, or this is a sync from before the edit - the
+    # command is not run against whatever the role points at now.
+    target = command.get(COMMAND_TARGET_FIELD)
+    if isinstance(target, dict) and target.get("role") and target.get("entity_id"):
+        mapped = (device.get("entities") or {}).get(str(target["role"]))
+        if mapped != target["entity_id"]:
+            raise CommandRefused("the mapping changed in Home Assistant before this command ran, so it was not run")
     # The household grants control in so many words when they map the device
     # (a legacy mapping with no flag keeps what it had). A switch that is
     # merely mapped is watched, never switched; a missing `number` means no

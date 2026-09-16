@@ -43,6 +43,13 @@ For each role the picker shows only plausible entities (a `switch` for the
 charging switch, a power `sensor` for power). What your Home Assistant can do,
 Ohmter can schedule; Ohmter does not add capabilities your integration lacks.
 
+A confirmation belongs to one entity. If you later pick a different switch
+(or thermostat), the check screen starts unconfirmed and says what changed,
+and plans you saved in Ohmter for the old one do not run until you enable
+them again under **Devices → Connection & activity**. Renaming an entity in
+Home Assistant is not a change of entity: Ohmter recognises it by its registry
+entry and your plans stay as they are.
+
 **Switch off your charger's own smart or eco mode.** Wallbox, Zaptec, go-e and
 others ship a scheduler of their own; two plans fighting over one car is worse
 than either alone. The bridge reports when the charging switch has gone

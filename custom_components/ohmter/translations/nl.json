@@ -8,6 +8,11 @@
           "pairing_code": "Koppelcode",
           "bridge_name": "Naam zoals getoond in Ohmter",
           "base_url": "Ohmter-server"
+        },
+        "data_description": {
+          "pairing_code": "Acht tekens, in je Ohmter-dashboard getoond als ABCD-EFGH. Hoofd- of kleine letters, met of zonder streepje.",
+          "bridge_name": "Hoe deze Home Assistant in je Ohmter-dashboard heet.",
+          "base_url": "Alleen voor ontwikkeling. Laat staan zoals het is."
         }
       },
       "reauth_confirm": {
@@ -15,6 +20,9 @@
         "description": "Ohmter heeft deze Home Assistant losgekoppeld. Maak een nieuwe koppelcode in je Ohmter-dashboard en typ die hier. Je apparaten en hun geschiedenis blijven bewaard.",
         "data": {
           "pairing_code": "Koppelcode"
+        },
+        "data_description": {
+          "pairing_code": "Acht tekens, in je Ohmter-dashboard getoond als ABCD-EFGH. Hoofd- of kleine letters, met of zonder streepje."
         }
       }
     },
@@ -46,42 +54,88 @@
           "kind": "Soort"
         }
       },
-      "map_entities": {
-        "title": "Welke entiteiten?",
-        "description": "Kies de entiteiten van deze {kind} uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
+      "map_ev": {
+        "title": "Welke entiteiten horen bij deze laadpaal?",
+        "description": "Kies de entiteiten van deze laadpaal uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
         "data": {
           "name": "Naam zoals getoond in Ohmter",
           "switch": "Laadschakelaar",
           "power": "Laadvermogen",
           "current": "Maximale laadstroom",
-          "energy": "Energie",
-          "plugged_in": "Auto aangesloten",
-          "climate": "Thermostaat",
-          "import_power": "Afgenomen vermogen (van het net)",
-          "export_power": "Teruggeleverd vermogen (naar het net)",
-          "import_energy": "Totaal afgenomen energie",
-          "export_energy": "Totaal teruggeleverde energie",
-          "consumption": "Verbruik van het huis",
-          "grid_import": "Afname van het net",
-          "grid_export": "Teruglevering aan het net",
-          "soc": "Laadtoestand"
+          "energy": "Energie van de laadpaal",
+          "plugged_in": "Auto aangesloten"
         },
         "data_description": {
-          "name": "Een label. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "name": "Een label van hoogstens 80 tekens. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
           "switch": "Optioneel. Aan moet betekenen dat de auto mag laden, uit moet het stoppen. Nodig om Ohmter het laden te laten starten en stoppen; zonder wordt de laadpaal alleen gevolgd. Je bevestigt dit op het volgende scherm.",
           "power": "Verplicht. Wat de laadpaal nu afneemt, in W of kW. Zo ziet Ohmter dat er geladen wordt.",
           "current": "Optioneel. Een number-entiteit voor de maximale stroom van de laadpaal in A. Nodig voor load balancing onder je hoofdzekering; zonder verandert Ohmter de stroom nooit.",
           "energy": "Optioneel. De eigen sessie- of totaalteller van de laadpaal in Wh of kWh. Hiermee komt de sessie-energie van de laadpaal zelf in plaats van een schatting uit vermogen.",
-          "plugged_in": "Optioneel. Een binary sensor die zegt of er een auto is aangesloten. Hiermee wordt een start zonder auto als zodanig gemeld, niet als storing.",
-          "climate": "Verplicht. Ohmter leest hieruit de huidige en de doeltemperatuur en zet, zodra je bediening bevestigt, het doel tijdens een goedkoop venster en herstelt het daarna.",
+          "plugged_in": "Optioneel. Een binary sensor die zegt of er een auto is aangesloten. Hiermee wordt een start zonder auto als zodanig gemeld, niet als storing."
+        }
+      },
+      "map_thermostat": {
+        "title": "Welke entiteit is deze thermostaat?",
+        "description": "Kies de thermostaat uit je Home Assistant. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
+        "data": {
+          "name": "Naam zoals getoond in Ohmter",
+          "climate": "Thermostaat"
+        },
+        "data_description": {
+          "name": "Een label van hoogstens 80 tekens. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "climate": "Verplicht. Ohmter leest hieruit de huidige en de doeltemperatuur en zet, zodra je bediening bevestigt, het doel tijdens een goedkoop venster en herstelt het daarna."
+        }
+      },
+      "map_p1": {
+        "title": "Welke entiteiten horen bij deze P1-meter?",
+        "description": "Kies de entiteiten van de meter uit je Home Assistant. Ohmter leest een meter uit en bedient hem nooit. Gebruik het netto vermogen, of afgenomen en teruggeleverd vermogen samen. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
+        "data": {
+          "name": "Naam zoals getoond in Ohmter",
+          "power": "Netto vermogen op de aansluiting",
+          "import_power": "Afgenomen vermogen (van het net)",
+          "export_power": "Teruggeleverd vermogen (aan het net)",
+          "import_energy": "Totaal afgenomen energie",
+          "export_energy": "Totaal teruggeleverde energie"
+        },
+        "data_description": {
+          "name": "Een label van hoogstens 80 tekens. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "power": "Wat er nu door je aansluiting gaat, in W of kW: positief als je van het net afneemt, negatief als je teruglevert. Laat leeg als de meter aparte sensoren voor afname en teruglevering heeft.",
           "import_power": "Gebruik samen met teruggeleverd vermogen als de meter geen enkele netto-sensor heeft.",
           "export_power": "Gebruik samen met afgenomen vermogen als de meter geen enkele netto-sensor heeft.",
           "import_energy": "Optioneel. Cumulatieve teller, in kWh.",
-          "export_energy": "Optioneel. Cumulatieve teller, in kWh.",
+          "export_energy": "Optioneel. Cumulatieve teller, in kWh."
+        }
+      },
+      "map_solar": {
+        "title": "Welke entiteiten horen bij deze omvormer?",
+        "description": "Kies de entiteiten van de omvormer uit je Home Assistant. Ohmter leest een omvormer uit en bedient hem nooit. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
+        "data": {
+          "name": "Naam zoals getoond in Ohmter",
+          "power": "Opgewekt vermogen",
+          "consumption": "Verbruik van het huis",
+          "grid_import": "Afname van het net",
+          "grid_export": "Teruglevering aan het net"
+        },
+        "data_description": {
+          "name": "Een label van hoogstens 80 tekens. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "power": "Verplicht. Wat de panelen nu opwekken, in W of kW.",
           "consumption": "Optioneel. Laat Ohmter het eigen verbruik tonen.",
           "grid_import": "Optioneel. Wat werkelijk van het net wordt afgenomen.",
-          "grid_export": "Optioneel. Wat werkelijk aan het net wordt geleverd. Zonder dit schat Ohmter de teruglevering niet uit de opbrengst.",
-          "soc": "Verplicht. Laadtoestand van de batterij in %. Ohmter leest hem; hij stuurt de batterij nooit."
+          "grid_export": "Optioneel. Wat werkelijk aan het net wordt geleverd. Zonder dit schat Ohmter de teruglevering niet uit de opbrengst."
+        }
+      },
+      "map_battery": {
+        "title": "Welke entiteiten horen bij deze thuisbatterij?",
+        "description": "Kies de entiteiten van de batterij uit je Home Assistant. Ohmter leest een batterij uit en stuurt hem in deze versie nooit. Ohmter ontvangt alleen de entiteiten die je hier kiest. Tijdens het instellen wordt niets geschakeld; het volgende scherm toont wat elke entiteit nu meet.",
+        "data": {
+          "name": "Naam zoals getoond in Ohmter",
+          "soc": "Laadtoestand",
+          "power": "Batterijvermogen"
+        },
+        "data_description": {
+          "name": "Een label van hoogstens 80 tekens. Later hernoemen behoudt het apparaat en zijn geschiedenis.",
+          "soc": "Verplicht. Laadtoestand van de batterij in %. Ohmter leest hem; hij stuurt de batterij nooit.",
+          "power": "Optioneel. Laad- of ontlaadvermogen in W of kW, zoals je batterij-integratie het meldt."
         }
       },
       "remove_device": {
@@ -98,12 +152,14 @@
       },
       "confirm_mapping": {
         "title": "Controleer voor het opslaan",
-        "description": "**{name}** ({kind})\n\nWat elke entiteit nu meet:\n{readings}\n\nEntiteiten die op dit moment niet beschikbaar zijn: {quiet}\n\nWat Ohmter zal kunnen doen: {features}\n\nBedieningsentiteit: {control_entity}",
+        "description": "**{name}** ({kind})\n\nWat elke entiteit nu meet:\n{readings}\n\nEntiteiten die op dit moment niet beschikbaar zijn: {quiet}\n\nWat Ohmter zal kunnen doen: {features}\n\nBedieningsentiteit: {control_entity}\n\n{notice}",
         "data": {
-          "confirm_control": "Ik bevestig dat deze entiteit aanzetten het laden start (toestaat) en uitzetten het stopt, en dat Ohmter dat mag doen."
+          "confirm_control": "Ik bevestig dat deze entiteit aanzetten het laden start (toestaat) en uitzetten het stopt, en dat Ohmter dat mag doen.",
+          "confirm_thermostat_control": "Ik bevestig dat Ohmter tijdens een goedkoop venster de doeltemperatuur van deze thermostaat mag instellen en daarna terugzet wat er stond."
         },
         "data_description": {
-          "confirm_control": "Laat dit uit om het apparaat alleen te volgen. Je kunt dit later wijzigen onder Wijzigen."
+          "confirm_control": "Laat dit uit om het apparaat alleen te volgen. Een bevestiging geldt voor één entiteit: kies je later een andere, dan bevestig je opnieuw. Je kunt dit wijzigen onder Wijzigen.",
+          "confirm_thermostat_control": "Laat dit uit om de thermostaat alleen uit te lezen. Een bevestiging geldt voor één entiteit: kies je later een andere, dan bevestig je opnieuw."
         }
       }
     },
@@ -115,7 +171,8 @@
       "wrong_domain": "Deze entiteit is van het verkeerde soort voor deze rol (bijvoorbeeld een sensor waar een schakelaar nodig is).",
       "wrong_unit": "Deze entiteit meldt een eenheid die Ohmter niet als deze rol kan lezen (bijvoorbeeld V of % waar W nodig is).",
       "not_numeric": "De waarde van deze entiteit is geen getal.",
-      "invalid_entity": "Deze entiteit past niet bij deze rol."
+      "invalid_entity": "Deze entiteit past niet bij deze rol.",
+      "name_too_long": "Gebruik een naam van hoogstens 80 tekens."
     },
     "abort": {
       "device_gone": "Dat apparaat staat niet meer in de lijst."
@@ -158,6 +215,10 @@
     "bridge_conflict": {
       "title": "Twee Home Assistants gebruiken dezelfde Ohmter-koppeling",
       "description": "Een andere Home Assistant (misschien een teruggezette back-up) meldt zich met de token van deze bridge. Ohmter stuurt geen opdrachten tot er nog maar één over is. Verwijder de integratie uit de kopie die je niet gebruikt en koppel deze opnieuw."
+    },
+    "mapping_refused": {
+      "title": "Ohmter heeft de laatste apparaatwijziging niet geaccepteerd",
+      "description": "Ohmter weigerde de apparaatwijziging die je opsloeg: {reason}. Ohmter blijft de apparaten gebruiken die het eerder accepteerde, en aan je plannen veranderde niets. Open Ohmter, kies Configureren, dan Apparaat wijzigen, en corrigeer het."
     }
   }
 }

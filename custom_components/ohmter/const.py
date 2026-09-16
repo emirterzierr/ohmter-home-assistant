@@ -1,7 +1,7 @@
 """Names shared by the Home Assistant glue. Protocol values live in protocol.py."""
 
 DOMAIN = "ohmter"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 CONF_CODE = "pairing_code"
 CONF_NAME = "bridge_name"
@@ -15,6 +15,10 @@ STORAGE_KEY = "ohmter.{entry_id}"
 
 ISSUE_REVOKED = "bridge_revoked"
 ISSUE_CONFLICT = "bridge_conflict"
+ISSUE_MAPPING_REFUSED = "mapping_refused"
+
+# Longest device name Ohmter stores (routers/bridge_routes.py DeviceSpec.name).
+MAX_NAME_LENGTH = 80
 
 KIND_LABELS = {
     "ev": ("EV charger", "Laadpaal"),

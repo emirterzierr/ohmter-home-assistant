@@ -12,6 +12,13 @@ Home Assistant glue around the pure modules. What it owns:
 A failed sync raises `UpdateFailed` *after* the watchdog has had its turn, so
 "Ohmter is unreachable" and "hand the hardware back" never depend on each
 other.
+
+A mapping Ohmter refuses is not a failed sync. The bridge keeps reporting
+through the last mapping Ohmter accepted (persisted, so a restart does not
+lose it), raises a repair issue that says so in the household's language, and
+tries the new mapping again only when it changes. Before this, one refused
+PUT - an 81-character device name was enough - failed every tick and the
+config entry's setup, and the whole bridge went silent.
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.instance_id import async_get as async_get_instance_id
@@ -39,6 +47,7 @@ from .const import (
     CONF_TOKEN,
     DOMAIN,
     ISSUE_CONFLICT,
+    ISSUE_MAPPING_REFUSED,
     ISSUE_REVOKED,
     OPT_DEVICES,
     STORAGE_KEY,
@@ -47,7 +56,7 @@ from .const import (
 )
 from .executor import CommandRefused, execute
 from .hastate import build_reports
-from .mapping import spec_for_server
+from .mapping import ACTION_ROLE, lang_index, refusal_reason, replaced_entity, spec_for_server
 from .ohmter_client import BridgeRevoked, OhmterClient, OhmterError, OhmterUnreachable
 from .protocol import SYNC_INTERVAL_SECONDS
 
@@ -85,7 +94,9 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             make_transport(async_get_clientsession(hass)),
             user_agent=f"OhmterHA/{VERSION} HomeAssistant/{HA_VERSION}",
         )
-        self.devices: List[Dict[str, Any]] = list(entry.options.get(OPT_DEVICES) or [])
+        # The devices as Ohmter last *accepted* them. Reports are read through
+        # this list, never through a mapping the server refused.
+        self.devices: List[Dict[str, Any]] = []
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id))
         self.memories: Dict[str, Dict[str, Any]] = {}
         self.executed_ids: List[int] = []
@@ -93,6 +104,7 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.last_command_note: Optional[str] = None
         self.bridge_status: str = "starting"
         self._devices_signature: Optional[str] = None
+        self._refused_signature: Optional[str] = None
         self._instance_id: Optional[str] = None
 
     # -- lifecycle ------------------------------------------------------------
@@ -102,6 +114,10 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.memories = dict(stored.get("memories") or {})
         self.executed_ids = list(stored.get("executed_ids") or [])[-_MAX_REMEMBERED_IDS:]
         self.last_ok_sync = stored.get("last_ok_sync")
+        accepted = stored.get("accepted_devices")
+        # An install from before accepted_devices was stored starts from the
+        # saved options, which is what it reported through until now.
+        self.devices = list(accepted) if isinstance(accepted, list) else list(self.entry.options.get(OPT_DEVICES) or [])
         self._instance_id = await async_get_instance_id(self.hass)
 
     async def async_shutdown(self) -> None:
@@ -113,7 +129,36 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "memories": self.memories,
             "executed_ids": self.executed_ids[-_MAX_REMEMBERED_IDS:],
             "last_ok_sync": self.last_ok_sync,
+            "accepted_devices": self.devices,
         })
+
+    async def _send_mapping_if_changed(self) -> None:
+        """PUT the saved mapping when it changed; a refusal keeps the accepted one."""
+        current = list(self.entry.options.get(OPT_DEVICES) or [])
+        signature = json.dumps(current, sort_keys=True)
+        if signature in (self._devices_signature, self._refused_signature):
+            return
+        try:
+            await self.client.put_devices([spec_for_server(d) for d in current])
+        except (BridgeRevoked, OhmterUnreachable):
+            raise
+        except OhmterError as exc:
+            self._refused_signature = signature
+            _LOGGER.warning("Ohmter refused the device mapping (%s); still reporting through the one it accepted", exc.code)
+            ir.async_create_issue(
+                self.hass, DOMAIN, ISSUE_MAPPING_REFUSED, is_fixable=False, severity=ir.IssueSeverity.WARNING,
+                translation_key=ISSUE_MAPPING_REFUSED,
+                translation_placeholders={"reason": refusal_reason(exc.code, exc.status, lang_index(self.hass.config.language))},
+            )
+            return
+        # Accepted: whatever the bridge remembers about an entity a device no
+        # longer maps is dropped before the watchdog can act on it.
+        watchdog.forget_changed_targets(self.memories, self.devices, current)
+        self.devices = current
+        self._devices_signature = signature
+        self._refused_signature = None
+        ir.async_delete_issue(self.hass, DOMAIN, ISSUE_MAPPING_REFUSED)
+        await self._persist()
 
     def _bridge_meta(self) -> Dict[str, Any]:
         return {"ha_version": HA_VERSION, "integration_version": VERSION, "instance_id": self._instance_id or ""}
@@ -132,6 +177,15 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 return d
         return None
 
+    def _replaced(self, device: Dict[str, Any], action: str) -> Optional[str]:
+        """The entity this action would touch, if Home Assistant replaced it since it was mapped."""
+        role = ACTION_ROLE.get(str(action or ""))
+        entity_id = (device.get("entities") or {}).get(role) if role else None
+        if not entity_id:
+            return None
+        entry = er.async_get(self.hass).async_get(entity_id)
+        return replaced_entity(device, action, entry.id if entry is not None else None)
+
     # -- the loop ---------------------------------------------------------------
 
     async def _async_update_data(self) -> Dict[str, Any]:
@@ -141,12 +195,7 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # it changed. Home Assistant coalesces back-to-back reloads, so a
             # second device mapped while the first reload was still running
             # never reached Ohmter when the send lived in setup alone.
-            current = list(self.entry.options.get(OPT_DEVICES) or [])
-            signature = json.dumps(current, sort_keys=True)
-            if signature != self._devices_signature:
-                await self.client.put_devices([spec_for_server(d) for d in current])
-                self.devices = current
-                self._devices_signature = signature
+            await self._send_mapping_if_changed()
             reports = build_reports(self.devices, self._get_state, dt_util.utcnow().isoformat())
             result = await self.client.sync(bridge_meta=self._bridge_meta(), reports=reports)
         except BridgeRevoked as exc:
@@ -198,6 +247,12 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         if device is None:
             await self._safe_ack(cid, ok=False, error=f"no device mapped as {key!r} in Home Assistant")
             return
+        replaced = self._replaced(device, str(command.get("action") or ""))
+        if replaced:
+            await self._safe_ack(cid, ok=False, error=(
+                f"{replaced} was replaced in Home Assistant after it was mapped; not run. "
+                "Check the device in Ohmter > Configure."))
+            return
         mem = self.memories.setdefault(key, {})
         executed = set(self.executed_ids)
         try:
@@ -233,6 +288,11 @@ class OhmterCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             if device is None:
                 continue
             mem = self.memories.setdefault(key, {})
+            if self._replaced(device, str(synthetic.get("action") or "")):
+                # What the watchdog remembers was done to the old entity; the
+                # new one under the same id was never touched by Ohmter.
+                watchdog.mark_released(mem, now)
+                continue
             params = dict(synthetic.get("params") or {})
             params.pop("_release", None)
             # A release must run even if the interval guard would refuse it.

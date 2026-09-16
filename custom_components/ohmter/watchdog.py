@@ -99,3 +99,61 @@ def mark_released(memory: Dict[str, Any], now: datetime.datetime) -> None:
 def mark_ohmter_back(memories: Dict[str, Dict[str, Any]]) -> None:
     for mem in memories.values():
         mem.pop("released_at", None)
+
+
+def forget_changed_targets(
+    memories: Dict[str, Dict[str, Any]],
+    old_devices: List[Dict[str, Any]],
+    new_devices: List[Dict[str, Any]],
+) -> List[str]:
+    """Drop what the bridge remembers about an entity a device no longer maps.
+
+    The memory is kept per device, and the watchdog acts on it. Left alone
+    after an Edit that points the charging switch at another entity, a
+    remembered "off" for the old switch would make the release turn the *new*
+    switch on - a compensating command on an entity Ohmter never touched.
+    Returns the device keys whose memory changed.
+    """
+    old_by_key = {d.get("device_key"): d for d in (old_devices or [])}
+    touched = []
+    for d in new_devices or []:
+        key = d.get("device_key")
+        mem = memories.get(key)
+        if not mem:
+            continue
+        old = old_by_key.get(key)
+        if old is None:
+            # A key that carries a memory but was not in the accepted mapping
+            # has been removed and made again - `device_key` is the slug of the
+            # name and is only kept unique against the devices that exist, so
+            # deleting "Garage charger" and adding another one frees the key for
+            # a different entity. Nothing here proves it is the same target, so
+            # the rule the server uses applies: do not assume it is.
+            mem["last_action"] = None
+            mem["current_before"] = None
+            mem["last_number_write_at"] = None
+            mem["thermostat_before"] = None
+            touched.append(key)
+            continue
+        before, after = old.get("entities") or {}, d.get("entities") or {}
+        changed = False
+        if before.get("switch") != after.get("switch") and mem.get("last_action") in ("on", "off"):
+            mem["last_action"] = None
+            changed = True
+        if before.get("current") != after.get("current"):
+            if mem.get("current_before") is not None or mem.get("last_number_write_at"):
+                mem["current_before"] = None
+                mem["last_number_write_at"] = None
+                changed = True
+            if mem.get("last_action") == "set_current":
+                mem["last_action"] = None
+                changed = True
+        if before.get("climate") != after.get("climate") and (
+                mem.get("thermostat_before") or mem.get("last_action") in ("set_temperature", "restore")):
+            mem["thermostat_before"] = None
+            if mem.get("last_action") in ("set_temperature", "restore"):
+                mem["last_action"] = None
+            changed = True
+        if changed:
+            touched.append(key)
+    return touched
