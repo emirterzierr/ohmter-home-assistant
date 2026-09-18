@@ -102,9 +102,13 @@ class OhmterClient:
         self.token = body["bridge_token"]
         return body
 
-    async def put_devices(self, devices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def put_mapping(self, devices: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """PUT the full mapping; the whole answer, including `removed_in_ohmter`."""
         body = await self._call("PUT", PATHS["devices"], {"devices": devices})
-        return list(body.get("devices") or [])
+        return body if isinstance(body, dict) else {}
+
+    async def put_devices(self, devices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return list((await self.put_mapping(devices)).get("devices") or [])
 
     async def sync(self, *, bridge_meta: Dict[str, Any], reports: List[Dict[str, Any]]) -> Dict[str, Any]:
         return await self._call("POST", PATHS["sync"], {"bridge": bridge_meta, "devices": reports})

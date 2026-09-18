@@ -2,27 +2,41 @@
 
 Pure apart from two injected callables: `get_state(entity_id)` and
 `async call_service(domain, service, data)`. The memory it keeps - what a
-thermostat was set to before Ohmter touched it, when a `number` was last
-written - is a plain dict so the integration can persist it and the watchdog
-can read it.
+thermostat was set to before Ohmter touched it and what Ohmter set it to,
+what a `number` was before Ohmter's first write and what Ohmter last wrote -
+is a plain dict so the integration can persist it and the watchdog can read
+it.
 
-Three rules from docs/HOME_ASSISTANT_BRIDGE.md are enforced here:
+Four rules from docs/HOME_ASSISTANT_BRIDGE.md are enforced here:
 
 * An expired command is refused before anything is called.
 * A thermostat window *restores what was there*, not "eco": the baseline is
-  captured on the first set of a window and cleared on restore.
+  captured on the first set of a window and cleared on restore - and only
+  while the thermostat is still at what Ohmter set. A change the household
+  made in the meantime is theirs, and a restore does not undo it.
 * A `number` entity is written at most once per MIN_NUMBER_WRITE_INTERVAL,
   because a charger behind Home Assistant may still be a Zaptec.
+* A hand-back (``params.release``) is Ohmter letting go, not Ohmter
+  controlling: it runs without the household's grant - a withdrawn grant is
+  one of the reasons it runs - and it touches an entity only while that
+  entity is where Ohmter left it.
 """
 from __future__ import annotations
 
 import datetime
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from .protocol import ACTIONS_BY_KIND, COMMAND_TARGET_FIELD, MIN_NUMBER_WRITE_INTERVAL_SECONDS
+from .protocol import ACTIONS_BY_KIND, COMMAND_TARGET_FIELD, MIN_NUMBER_WRITE_INTERVAL_SECONDS, RELEASE_PARAM
 
 CallService = Callable[[str, str, Dict[str, Any]], Awaitable[None]]
 GetState = Callable[[str], Any]
+IsReplaced = Callable[[Dict[str, Any], str], Optional[str]]
+
+# How far an entity may drift from what Ohmter wrote and still count as
+# Ohmter's: a charger reports its current in whole amps, a thermostat its
+# target in halves.
+_AMPS_TOLERANCE = 0.5
+_TEMP_TOLERANCE = 0.25
 
 
 class CommandRefused(Exception):
@@ -54,6 +68,10 @@ def _num(v: Any) -> Optional[float]:
         return None
 
 
+def is_release(command: Dict[str, Any]) -> bool:
+    return bool((command.get("params") or {}).get(RELEASE_PARAM))
+
+
 async def execute(
     command: Dict[str, Any],
     device: Dict[str, Any],
@@ -74,6 +92,7 @@ async def execute(
         return "already executed"
     kind = str(device["kind"])
     action = str(command.get("action") or "")
+    release = is_release(command)
     if action not in ACTIONS_BY_KIND.get(kind, ()):
         raise CommandRefused(f"{action} is not an action for a {kind}")
     # The server names the entity the command was decided for. If this
@@ -88,37 +107,38 @@ async def execute(
     # The household grants control in so many words when they map the device
     # (a legacy mapping with no flag keeps what it had). A switch that is
     # merely mapped is watched, never switched; a missing `number` means no
-    # current limit. The server refuses these too; this is the last door.
+    # current limit. The server refuses these too; this is the last door. A
+    # hand-back passes it: it only ever undoes what Ohmter itself set.
     entities = device.get("entities") or {}
     confirmed = device.get("control_confirmed")
     if action in ("on", "off"):
         if not entities.get("switch"):
             raise CommandRefused("no charging switch is mapped for this device in Home Assistant")
-        if confirmed is False:
+        if confirmed is False and not release:
             raise CommandRefused("charging control was not confirmed for this device in Home Assistant")
     elif action == "set_current" and not entities.get("current"):
         raise CommandRefused("no charge-current entity is mapped for this device in Home Assistant")
-    elif action in ("set_temperature", "restore") and confirmed is False:
+    elif action in ("set_temperature", "restore") and confirmed is False and not release:
         raise CommandRefused("thermostat control was not confirmed for this device in Home Assistant")
     expires = _parse(command.get("expires_at"))
     if expires is not None:
         a, b = _same_clock(now, expires)
         if a >= b:
             raise CommandRefused("expired before the bridge ran it")
-    entities = device.get("entities") or {}
     params = command.get("params") or {}
 
     if kind == "ev":
-        note = await _execute_ev(action, params, entities, get_state, call_service, memory, now)
+        note = await _execute_ev(action, params, entities, get_state, call_service, memory, now, release)
     else:
         note = await _execute_thermostat(action, params, entities, get_state, call_service, memory)
     executed_ids.add(cid)
-    memory["last_action"] = action
-    memory["last_action_at"] = now.isoformat()
+    if not release:
+        memory["last_action"] = action
+        memory["last_action_at"] = now.isoformat()
     return note
 
 
-async def _execute_ev(action, params, entities, get_state, call_service, memory, now) -> str:
+async def _execute_ev(action, params, entities, get_state, call_service, memory, now, release) -> str:
     switch = entities.get("switch")
     if action in ("on", "off"):
         if not switch:
@@ -126,7 +146,13 @@ async def _execute_ev(action, params, entities, get_state, call_service, memory,
         st = get_state(switch)
         if st is None or st.state in ("unavailable", "unknown"):
             raise CommandRefused(f"{switch} is unavailable - the charger's own mode may be in control")
+        if release and st.state == action:
+            return f"{switch} already {action}"
         await call_service("switch", "turn_on" if action == "on" else "turn_off", {"entity_id": switch})
+        if not release:
+            # Kept apart from last_action: a current write after a pause must
+            # not hide that Ohmter is holding the charger off.
+            memory["switch_set"] = action
         return f"switch.{'turn_on' if action == 'on' else 'turn_off'} {switch}"
     if action == "set_current":
         number = entities.get("current")
@@ -144,20 +170,41 @@ async def _execute_ev(action, params, entities, get_state, call_service, memory,
             amps = lo
         if hi is not None and amps > hi:
             amps = hi
+        current = _num(st.state)
+        if release:
+            # Put back only a value that is still Ohmter's. A memory from
+            # before Ohmter recorded what it wrote cannot tell, and hands back.
+            written = _num(memory.get("current_written"))
+            if written is not None and current is not None and abs(current - written) >= _AMPS_TOLERANCE:
+                return f"{number} changed since Ohmter set it; left at {current:g}"
+            await call_service("number", "set_value", {"entity_id": number, "value": amps})
+            memory["last_number_write_at"] = None
+            return f"number.set_value {number}={amps}"
         last = _parse(memory.get("last_number_write_at"))
         if last is not None:
             a, b = _same_clock(now, last)
             if (a - b).total_seconds() < MIN_NUMBER_WRITE_INTERVAL_SECONDS:
-                current = _num(st.state)
-                if current is not None and abs(current - amps) < 0.5:
+                if current is not None and abs(current - amps) < _AMPS_TOLERANCE:
+                    memory["current_written"] = amps
                     return "current already at value"
                 raise CommandRefused("max current was written less than a minute ago")
         if memory.get("current_before") is None:
-            memory["current_before"] = _num(st.state)
+            memory["current_before"] = current
         await call_service("number", "set_value", {"entity_id": number, "value": amps})
         memory["last_number_write_at"] = now.isoformat()
+        memory["current_written"] = amps
         return f"number.set_value {number}={amps}"
     raise CommandRefused(f"unknown EV action {action}")
+
+
+def _changed_since_ohmter(set_by_ohmter: Dict[str, Any], st: Any) -> bool:
+    """Whether the thermostat has moved away from what Ohmter last set."""
+    attrs = st.attributes or {}
+    mode = set_by_ohmter.get("hvac_mode")
+    if mode and str(st.state) != str(mode):
+        return True
+    wanted, actual = _num(set_by_ohmter.get("temperature")), _num(attrs.get("temperature"))
+    return wanted is not None and actual is not None and abs(actual - wanted) >= _TEMP_TOLERANCE
 
 
 async def _execute_thermostat(action, params, entities, get_state, call_service, memory) -> str:
@@ -182,9 +229,11 @@ async def _execute_thermostat(action, params, entities, get_state, call_service,
                 "preset_mode": attrs.get("preset_mode"),
             }
         notes = []
+        applied_mode = None
         if mode and mode in (attrs.get("hvac_modes") or []):
             await call_service("climate", "set_hvac_mode", {"entity_id": climate, "hvac_mode": mode})
             notes.append(f"hvac_mode={mode}")
+            applied_mode = mode
         if target is not None:
             lo, hi = _num(attrs.get("min_temp")), _num(attrs.get("max_temp"))
             if lo is not None and target < lo:
@@ -193,11 +242,17 @@ async def _execute_thermostat(action, params, entities, get_state, call_service,
                 target = hi
             await call_service("climate", "set_temperature", {"entity_id": climate, "temperature": target})
             notes.append(f"temperature={target}")
+        memory["thermostat_set"] = {"temperature": target, "hvac_mode": applied_mode}
         return "climate " + " ".join(notes)
     if action == "restore":
         before = memory.get("thermostat_before")
         if not before:
             return "nothing to restore"
+        set_by_ohmter = memory.get("thermostat_set")
+        if set_by_ohmter and _changed_since_ohmter(set_by_ohmter, st):
+            memory["thermostat_before"] = None
+            memory["thermostat_set"] = None
+            return f"{climate} changed since Ohmter set it; left as the household has it"
         if before.get("hvac_mode") and before["hvac_mode"] in (attrs.get("hvac_modes") or [before["hvac_mode"]]):
             await call_service("climate", "set_hvac_mode", {"entity_id": climate, "hvac_mode": before["hvac_mode"]})
         if before.get("preset_mode") and before["preset_mode"] in (attrs.get("preset_modes") or []):
@@ -205,5 +260,44 @@ async def _execute_thermostat(action, params, entities, get_state, call_service,
         if before.get("temperature") is not None:
             await call_service("climate", "set_temperature", {"entity_id": climate, "temperature": before["temperature"]})
         memory["thermostat_before"] = None
+        memory["thermostat_set"] = None
         return f"climate restored to {before}"
     raise CommandRefused(f"unknown thermostat action {action}")
+
+
+async def hand_back(
+    device: Dict[str, Any],
+    commands: List[Dict[str, Any]],
+    *,
+    get_state: GetState,
+    call_service: CallService,
+    memory: Dict[str, Any],
+    now: datetime.datetime,
+    is_replaced: Optional[IsReplaced] = None,
+) -> List[Tuple[bool, str]]:
+    """Run one device's hand-back commands; never raises.
+
+    Returns (done, note) per command. Nothing left to hand back is done: the
+    entity is already where the household wants it, they changed it since, or
+    Home Assistant replaced it under the same id since it was mapped - so
+    Ohmter never touched the one there now. An entity that is unavailable, or
+    a service call that fails, is not done, and the caller keeps what it
+    remembers so a later hand-back can still run.
+    """
+    results: List[Tuple[bool, str]] = []
+    for cmd in commands:
+        action = str(cmd.get("action") or "")
+        replaced = is_replaced(device, action) if is_replaced is not None else None
+        if replaced:
+            results.append((True, f"{action}: nothing to hand back, {replaced} was replaced in Home Assistant"))
+            continue
+        try:
+            results.append((True, await execute(
+                cmd, device, get_state=get_state, call_service=call_service,
+                memory=memory, now=now, executed_ids=set(),
+            )))
+        except CommandRefused as exc:
+            results.append((False, f"{action}: not run, {exc}"))
+        except Exception as exc:  # noqa: BLE001 - one failed service call must not stop the next hand-back
+            results.append((False, f"{action}: failed, {str(exc)[:160]}"))
+    return results

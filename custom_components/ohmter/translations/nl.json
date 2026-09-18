@@ -142,7 +142,8 @@
         "title": "Apparaten verwijderen",
         "data": {
           "devices": "Te verwijderen apparaten"
-        }
+        },
+        "description": "Ohmter leest en bedient de apparaten die je verwijdert niet meer, en geeft terug wat het erop had ingesteld: een laadpaal die het uitschakelde gaat weer aan, een laadstroom die het verlaagde gaat terug naar wat hij was, en een thermostaat gaat terug naar je eigen instelling. Wat je zelf sindsdien hebt veranderd, blijft zoals jij het instelde."
       },
       "edit_device": {
         "title": "Welk apparaat?",
@@ -210,7 +211,7 @@
   "issues": {
     "bridge_revoked": {
       "title": "Ohmter heeft deze Home Assistant losgekoppeld",
-      "description": "Deze bridge is losgekoppeld vanuit het Ohmter-dashboard. Ohmter stuurt geen opdrachten meer. Maak een nieuwe koppelcode in Ohmter en koppel de integratie opnieuw om weer te verbinden."
+      "description": "Deze bridge is losgekoppeld vanuit het Ohmter-dashboard. Ohmter stuurt geen opdrachten meer, en deze integratie heeft teruggegeven wat Ohmter op je apparaten had ingesteld. Maak een nieuwe koppelcode in Ohmter en koppel de integratie opnieuw om weer te verbinden."
     },
     "bridge_conflict": {
       "title": "Twee Home Assistants gebruiken dezelfde Ohmter-koppeling",
@@ -219,6 +220,10 @@
     "mapping_refused": {
       "title": "Ohmter heeft de laatste apparaatwijziging niet geaccepteerd",
       "description": "Ohmter weigerde de apparaatwijziging die je opsloeg: {reason}. Ohmter blijft de apparaten gebruiken die het eerder accepteerde, en aan je plannen veranderde niets. Open Ohmter, kies Configureren, dan Apparaat wijzigen, en corrigeer het."
+    },
+    "removed_in_ohmter": {
+      "title": "Een apparaat is verwijderd in Ohmter",
+      "description": "{devices} is verwijderd uit je Ohmter-dashboard. Ohmter leest en bedient het niet meer, en wat Ohmter erop had ingesteld is teruggegeven. Het staat nog in deze integratie: verwijder het hier (Configureren, dan Een apparaat verwijderen). Wil je het weer met Ohmter gebruiken, verwijder het dan hier en voeg het opnieuw toe."
     }
   }
 }

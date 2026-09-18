@@ -12,9 +12,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
-from .const import CONF_BASE_URL, CONF_TOKEN
-from .coordinator import OhmterCoordinator, make_transport
+from .const import CONF_BASE_URL, CONF_TOKEN, OPT_DEVICES, STORAGE_KEY, STORAGE_VERSION
+from .coordinator import OhmterCoordinator, async_hand_back_all, make_transport
 from .ohmter_client import OhmterClient, OhmterError
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
@@ -47,12 +49,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: OhmterConfigEntry) -> b
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """The household deleted the integration: tell Ohmter, best effort.
+    """The household deleted the integration: hand back, forget, tell Ohmter.
 
-    If this fails the server ages the bridge out as offline and the dashboard
-    offers "Disconnect"; nothing is left able to command this Home Assistant
-    because the token is forgotten with the entry.
+    This runs only when the entry is deleted - `async_unload_entry` also runs
+    on every restart and every reload after a mapping change, so a hand-back
+    there would undo Ohmter's work each time Home Assistant restarts. By now
+    the coordinator has unloaded and saved its memory, so what Ohmter left set
+    is read back from storage, handed back, and the storage is removed with
+    the entry rather than left behind.
+
+    Telling Ohmter is best effort: if it fails the server ages the bridge out
+    as offline and the dashboard offers "Disconnect"; nothing is left able to
+    command this Home Assistant because the token is forgotten with the entry.
     """
+    store = Store(hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id))
+    try:
+        stored = await store.async_load() or {}
+    except Exception:  # noqa: BLE001 - unreadable storage must not stop the removal
+        stored = {}
+    accepted = stored.get("accepted_devices")
+    devices = list(accepted) if isinstance(accepted, list) else list(entry.options.get(OPT_DEVICES) or [])
+    await async_hand_back_all(
+        hass, devices, dict(stored.get("memories") or {}), list(stored.get("pending_handbacks") or []),
+        dt_util.now().replace(tzinfo=None), why="integration removed",
+    )
+    await store.async_remove()
     client = OhmterClient(entry.data[CONF_BASE_URL], entry.data.get(CONF_TOKEN), make_transport(async_get_clientsession(hass)))
     try:
         await client.unpair()

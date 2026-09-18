@@ -398,11 +398,19 @@ class OhmterOptionsFlow(OptionsFlow):
         devices = self._devices()
         if user_input is not None:
             drop = set(user_input.get("devices") or [])
+            if not drop:
+                # Nothing ticked is nothing removed, not an error.
+                return await self.async_step_init()
             return self.async_create_entry(data={OPT_DEVICES: [d for d in devices if d["device_key"] not in drop]})
         return self.async_show_form(
             step_id="remove_device",
             data_schema=vol.Schema({
-                vol.Required("devices"): selector.SelectSelector(
+                # Optional with an empty default on purpose. As a required
+                # field, Home Assistant's form ticks the first device before
+                # the household touches anything - seen in 2026.9.2 - so
+                # ticking the meter and pressing Submit removed the charger
+                # listed above it as well.
+                vol.Optional("devices", default=[]): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[self._device_option(d) for d in devices], multiple=True,
                                                   mode=selector.SelectSelectorMode.LIST)
                 ),

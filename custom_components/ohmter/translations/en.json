@@ -142,7 +142,8 @@
         "title": "Remove devices",
         "data": {
           "devices": "Devices to remove"
-        }
+        },
+        "description": "Ohmter stops reading and controlling the devices you remove, and hands back whatever it had set on them: a charger it switched off is switched back on, a charging current it lowered goes back to what it was, and a thermostat returns to your own setting. Anything you changed yourself since is left as you set it."
       },
       "edit_device": {
         "title": "Which device?",
@@ -210,7 +211,7 @@
   "issues": {
     "bridge_revoked": {
       "title": "Ohmter disconnected this Home Assistant",
-      "description": "This bridge was disconnected from the Ohmter dashboard. Ohmter no longer sends commands. To connect again, make a new pairing code in Ohmter and re-pair the integration."
+      "description": "This bridge was disconnected from the Ohmter dashboard. Ohmter no longer sends commands, and this integration handed back whatever Ohmter had set on your devices. To connect again, make a new pairing code in Ohmter and re-pair the integration."
     },
     "bridge_conflict": {
       "title": "Two Home Assistants are using the same Ohmter pairing",
@@ -219,6 +220,10 @@
     "mapping_refused": {
       "title": "Ohmter did not accept the latest device change",
       "description": "Ohmter refused the device change you saved: {reason}. Ohmter keeps using the devices it accepted before, and nothing about your plans changed. Open Ohmter, choose Configure, then Change a device, and correct it."
+    },
+    "removed_in_ohmter": {
+      "title": "A device was removed in Ohmter",
+      "description": "{devices} was removed from your Ohmter dashboard. Ohmter no longer reads or controls it, and whatever Ohmter had set on it was handed back. It is still listed in this integration: remove it here (Configure, then Remove a device). To use it with Ohmter again, remove it here and add it again."
     }
   }
 }

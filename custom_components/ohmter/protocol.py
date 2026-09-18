@@ -27,6 +27,13 @@ ACTIONS_BY_KIND = {
     "battery": (),
 }
 
+# The roles Ohmter can leave something set on, per kind, and the command
+# parameter that marks a hand-back: Ohmter letting go of a device. The bridge
+# resolves a hand-back from what it remembers Ohmter set; the command's own
+# action is only what an integration from before 0.3.0 runs instead.
+HOLDABLE_ROLES = {"ev": ("switch", "current"), "thermostat": ("climate",)}
+RELEASE_PARAM = "release"
+
 ROLES_BY_KIND = {
     "ev": ("switch", "power", "current", "energy", "plugged_in"),
     "thermostat": ("climate",),
