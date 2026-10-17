@@ -68,9 +68,10 @@ Three diagnostic entities show what is happening: **Ohmter connected**,
 
 ## Installing
 
-Through [HACS](https://hacs.xyz): add this repository as a custom repository
-of type *Integration*, install **Ohmter**, restart Home Assistant. Or copy
-`custom_components/ohmter` into your `config/custom_components/` folder.
+Through [HACS](https://hacs.xyz): add `emirterzierr/ohmter-home-assistant` as
+a custom repository of type *Integration*, install **Ohmter**, restart Home
+Assistant. Or copy `custom_components/ohmter` into your
+`config/custom_components/` folder.
 
 Requires Home Assistant 2025.6 or newer.
 
@@ -81,6 +82,17 @@ every 20 seconds, together with your Home Assistant version and its instance
 id (so two copies of one pairing can be told apart). Nothing else. Ohmter's
 privacy policy at https://ohmter.nl/privacy covers this data; **Delete my
 account** in the dashboard removes it, the pairing included.
+
+## Where the source lives
+
+The `emirterzierr/ohmter-home-assistant` repository is **build output**: it is
+produced from the `bridge/home_assistant/` folder of
+[emirterzierr/smart-energy](https://github.com/emirterzierr/smart-energy) by
+`scripts/release_home_assistant.sh` (a `git subtree split`), so that HACS finds
+`custom_components/ohmter/` at the root. Nothing is edited there directly - a
+change made in that repository is overwritten by the next release. Open issues
+and pull requests against smart-energy; the server half of the protocol lives
+there, and a test holds the two halves together.
 
 ## Trademark
 
